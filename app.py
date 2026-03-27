@@ -22,8 +22,25 @@ if st.button("🔍 Get AI Insight"):
                 f"?function=TIME_SERIES_INTRADAY&symbol={stock_symbol}&interval=1min&apikey={alpha_vantage_api_key}"
             )
             data = requests.get(url, timeout=30).json()
-            latest_time = list(data["Time Series (1min)"].keys())[0]
-            latest_data = data["Time Series (1min)"][latest_time]
+
+            if "Error Message" in data:
+                st.error("Alpha Vantage could not find that symbol. Please check the ticker and try again.")
+                st.stop()
+
+            if "Note" in data:
+                st.warning(
+                    "Alpha Vantage rate limit reached. Wait a minute and try again, or use a different API key."
+                )
+                st.stop()
+
+            series = data.get("Time Series (1min)")
+            if not series:
+                st.error("Live intraday data was not returned for this symbol. Please try again in a moment.")
+                st.write("API response:", data)
+                st.stop()
+
+            latest_time = next(iter(series))
+            latest_data = series[latest_time]
             current_price = latest_data["1. open"]
 
             st.success(f"📉 {stock_symbol} is currently **${current_price}** (as of {latest_time})")
