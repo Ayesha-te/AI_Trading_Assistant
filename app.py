@@ -1,5 +1,5 @@
-import requests
 import streamlit as st
+import yfinance as yf
 from openai import OpenAI
 
 
@@ -8,45 +8,38 @@ def get_client() -> OpenAI:
 
 
 st.set_page_config(page_title="AI Trading Assistant", layout="centered")
-st.title("📊 AI Trading Assistant")
+st.title("AI Trading Assistant")
 st.markdown("Get real-time stock prices and AI-powered trading insights.")
 
-alpha_vantage_api_key = st.secrets["ALPHA_VANTAGE_API_KEY"]
-stock_symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, TSLA)", "AAPL").upper()
+stock_symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, TSLA)", "AAPL").upper().strip()
 
-if st.button("🔍 Get AI Insight"):
+data = yf.download(
+    tickers=stock_symbol,
+    interval="1m",
+    period="1d",
+    progress=False,
+)
+
+if data.empty:
+    st.error("No data found. Try another symbol.")
+else:
+    st.write(data)
+    st.line_chart(data["Close"])
+
+if st.button("Get AI Insight"):
     with st.spinner("Fetching stock data..."):
         try:
-            url = (
-                "https://www.alphavantage.co/query"
-                f"?function=TIME_SERIES_INTRADAY&symbol={stock_symbol}&interval=1min&apikey={alpha_vantage_api_key}"
-            )
-            data = requests.get(url, timeout=30).json()
-
-            if "Error Message" in data:
-                st.error("Alpha Vantage could not find that symbol. Please check the ticker and try again.")
+            if data.empty:
+                st.error("No data found. Try another symbol.")
                 st.stop()
 
-            if "Note" in data:
-                st.warning(
-                    "Alpha Vantage rate limit reached. Wait a minute and try again, or use a different API key."
-                )
-                st.stop()
+            latest_time = data.index[-1]
+            current_price = float(data["Close"].iloc[-1])
 
-            series = data.get("Time Series (1min)")
-            if not series:
-                st.error("Live intraday data was not returned for this symbol. Please try again in a moment.")
-                st.write("API response:", data)
-                st.stop()
-
-            latest_time = next(iter(series))
-            latest_data = series[latest_time]
-            current_price = latest_data["1. open"]
-
-            st.success(f"📉 {stock_symbol} is currently **${current_price}** (as of {latest_time})")
+            st.success(f"{stock_symbol} is currently **${current_price:.2f}** (as of {latest_time})")
 
             prompt = (
-                f"The current price of {stock_symbol} is ${current_price}. "
+                f"The current price of {stock_symbol} is ${current_price:.2f}. "
                 "Provide a concise trading insight with a buy, sell, or hold view, "
                 "plus reasoning and risk advice. Make it educational, not financial advice."
             )
@@ -58,7 +51,7 @@ if st.button("🔍 Get AI Insight"):
                     {"role": "user", "content": prompt},
                 ],
             )
-            st.subheader("🤖 AI Trading Insight")
+            st.subheader("AI Trading Insight")
             st.markdown(result.choices[0].message.content or "")
 
         except Exception as e:
